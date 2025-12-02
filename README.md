@@ -124,6 +124,66 @@ TaskFlow is a containerized full-stack task management application featuring mul
 | `/docs` | Swagger UI interactive documentation |
 | `/redoc` | ReDoc API documentation |
 
+
+---
+
+## Database Schema
+
+```
+┌──────────────────────────────────────┐          ┌──────────────────────────────────────┐
+│               users                  │          │               todos                  │
+├──────────────────────────────────────┤          ├──────────────────────────────────────┤
+│ PK │ id              INTEGER         │          │ PK │ id              INTEGER         │
+├────┼─────────────────────────────────┤          ├────┼─────────────────────────────────┤
+│    │ username        VARCHAR  [UQ]   │          │ FK │ user_id         INTEGER         │──┐
+│    │ email           VARCHAR  [UQ]   │          │    │ title           VARCHAR         │  │
+│    │ hashed_password VARCHAR         │          │    │ description     VARCHAR  [NULL] │  │
+│    │ is_admin        BOOLEAN         │          │    │ completed       BOOLEAN         │  │
+│    │ is_active       BOOLEAN         │          │    │ status          VARCHAR         │  │
+│    │ email_verified  BOOLEAN         │          │    │ priority        VARCHAR         │  │
+│    │ email_verification_token VARCHAR│          │    │ start_date      VARCHAR  [NULL] │  │
+│    │ created_at      DATETIME        │          │    │ end_date        VARCHAR  [NULL] │  │
+└──────────────────────────────────────┘          │    │ category        VARCHAR         │  │
+                 │                                │    │ created_at      DATETIME        │  │
+                 │                                │    │ updated_at      DATETIME        │  │
+                 │          1:N                   └──────────────────────────────────────┘  │
+                 └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Schema Details
+
+#### Users Table
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | INTEGER | PRIMARY KEY, INDEX |
+| `username` | VARCHAR | UNIQUE, INDEX, NOT NULL |
+| `email` | VARCHAR | UNIQUE, INDEX, NOT NULL |
+| `hashed_password` | VARCHAR | NOT NULL |
+| `is_admin` | BOOLEAN | DEFAULT: false |
+| `is_active` | BOOLEAN | DEFAULT: true |
+| `email_verified` | BOOLEAN | DEFAULT: true |
+| `email_verification_token` | VARCHAR | NULLABLE |
+| `created_at` | DATETIME | DEFAULT: NOW() |
+
+#### Todos Table
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | INTEGER | PRIMARY KEY, INDEX |
+| `user_id` | INTEGER | FOREIGN KEY → users.id, NOT NULL |
+| `title` | VARCHAR | NOT NULL |
+| `description` | VARCHAR | NULLABLE |
+| `completed` | BOOLEAN | DEFAULT: false |
+| `status` | VARCHAR | DEFAULT: 'todo' |
+| `priority` | VARCHAR | DEFAULT: 'medium' |
+| `start_date` | VARCHAR | NULLABLE |
+| `end_date` | VARCHAR | NULLABLE |
+| `category` | VARCHAR | DEFAULT: 'General' |
+| `created_at` | DATETIME | DEFAULT: NOW() |
+| `updated_at` | DATETIME | DEFAULT: NOW(), ON UPDATE |
+
+> **Note:** Deleting a user cascades to delete all their todos.
 ---
 
 ## Getting Started
