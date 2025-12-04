@@ -34,6 +34,15 @@ TaskFlow is a containerized full-stack task management application featuring mul
 - Input validation via Pydantic schemas
 - Request logging middleware
 
+### User Profile
+- Dedicated profile settings page
+- Edit username and email with validation
+- Profile picture upload with modal interface
+- Image validation (max 5MB, supports JPG, PNG, GIF, WebP)
+- Remove profile picture option
+- Visual avatar fallback with user initials
+- Administrator badge display for admin users
+
 ### Administration
 - User management dashboard
 - System-wide statistics
@@ -94,6 +103,7 @@ TaskFlow is a containerized full-stack task management application featuring mul
 | `POST` | `/auth/register` | Register a new user account |
 | `POST` | `/auth/login` | Authenticate and retrieve JWT token |
 | `GET` | `/auth/me` | Retrieve current user profile |
+| `PUT` | `/auth/me` | Update user profile (username, email, profile picture) |
 
 ### Task Endpoints (Authentication Required)
 
@@ -139,7 +149,7 @@ TaskFlow is a containerized full-stack task management application featuring mul
 │    │ email           VARCHAR  [UQ]   │          │    │ title           VARCHAR         │  │
 │    │ hashed_password VARCHAR         │          │    │ description     VARCHAR  [NULL] │  │
 │    │ is_admin        BOOLEAN         │          │    │ completed       BOOLEAN         │  │
-│    │ is_active       BOOLEAN         │          │    │ status          VARCHAR         │  │
+│    │ profile_picture TEXT    [NULL]  │          │    │ status          VARCHAR         │  │
 │    │ email_verified  BOOLEAN         │          │    │ priority        VARCHAR         │  │
 │    │ email_verification_token VARCHAR│          │    │ start_date      VARCHAR  [NULL] │  │
 │    │ created_at      DATETIME        │          │    │ end_date        VARCHAR  [NULL] │  │
@@ -161,6 +171,7 @@ TaskFlow is a containerized full-stack task management application featuring mul
 | `email` | VARCHAR | UNIQUE, INDEX, NOT NULL |
 | `hashed_password` | VARCHAR | NOT NULL |
 | `is_admin` | BOOLEAN | DEFAULT: false |
+| `profile_picture` | TEXT | NULLABLE (Base64 encoded image) |
 | `is_active` | BOOLEAN | DEFAULT: true |
 | `email_verified` | BOOLEAN | DEFAULT: true |
 | `email_verification_token` | VARCHAR | NULLABLE |
@@ -267,7 +278,7 @@ TaskFlow/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          # Root React component
-│   │   ├── components/      # UI components
+│   │   ├── components/      # UI components (ProfilePage, TodoList, etc.)
 │   │   ├── context/         # Authentication context provider
 │   │   └── services/        # API service layer
 │   └── Dockerfile
