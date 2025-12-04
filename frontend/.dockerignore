@@ -8,3 +8,8 @@ dist
 .env.*.local
 coverage
 .DS_Store
+.git
+.venv
+__pycache__
+frontend/node_modules
+**/*.pyc
