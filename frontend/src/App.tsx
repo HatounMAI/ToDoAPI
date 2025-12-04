@@ -7,7 +7,9 @@ import { CalendarPage } from './components/CalendarPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { RegisterPage } from './components/auth/RegisterPage';
 import { AdminPage } from './components/AdminPage';
-import { LogOut, Crown, ChevronDown } from 'lucide-react';
+import { ProfilePage } from './components/ProfilePage';
+import { LogOut, Crown, ChevronDown, Settings } from 'lucide-react';
+import { ImageWithFallback } from './components/ui/ImageWithFallback';
 
 export type TaskStatus = 'todo' | 'in-progress' | 'done' | 'blocked';
 export type TaskPriority = 'low' | 'medium' | 'high';
@@ -64,7 +66,7 @@ function taskToTodoUpdate(updates: Partial<Task>): TodoUpdate {
   return todoUpdate;
 }
 
-type Page = 'home' | 'tasks' | 'calendar' | 'admin';
+type Page = 'home' | 'tasks' | 'calendar' | 'admin' | 'profile';
 type AuthPage = 'login' | 'register';
 
 function AppContent() {
@@ -75,6 +77,19 @@ function AppContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showProfileDropdown && !target.closest('.profile-dropdown-container')) {
+        setShowProfileDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showProfileDropdown]);
 
   // Fetch todos from backend
   useEffect(() => {
@@ -244,14 +259,22 @@ function AppContent() {
               )}
 
               {/* User Profile Dropdown */}
-              <div className="relative ml-4">
+              <div className="relative ml-4 profile-dropdown-container">
                 <button
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white">
-                    {user?.username.charAt(0).toUpperCase()}
-                  </div>
+                  {user?.profile_picture ? (
+                    <ImageWithFallback
+                      src={user.profile_picture}
+                      alt="Profile"
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                      {user?.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <span className="text-gray-900">{user?.username}</span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
@@ -260,15 +283,40 @@ function AppContent() {
                 {showProfileDropdown && (
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                     <div className="px-4 py-3 border-b border-gray-200">
-                      <p className="text-gray-900">{user?.username}</p>
-                      <p className="text-gray-600">{user?.email}</p>
+                      <div className="flex items-center gap-3">
+                        {user?.profile_picture ? (
+                          <ImageWithFallback
+                            src={user.profile_picture}
+                            alt="Profile"
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+                            {user?.username.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-gray-900 font-medium">{user?.username}</p>
+                          <p className="text-gray-600 text-sm">{user?.email}</p>
+                        </div>
+                      </div>
                       {user?.is_admin && (
-                        <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                        <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
                           <Crown className="w-3 h-3" />
                           Admin
                         </div>
                       )}
                     </div>
+                    <button
+                      onClick={() => {
+                        setCurrentPage('profile');
+                        setShowProfileDropdown(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Profile Settings
+                    </button>
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
@@ -306,6 +354,7 @@ function AppContent() {
             currentUserId={user.id}
           />
         )}
+        {currentPage === 'profile' && <ProfilePage />}
       </main>
     </div>
   );

@@ -121,7 +121,15 @@ class UserResponse(BaseModel):
     is_admin: bool
     is_active: bool
     email_verified: bool
+    profile_picture: Optional[str] = None
     created_at: datetime
+
+
+class ProfileUpdate(BaseModel):
+    """Model for profile update"""
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    email: Optional[EmailStr] = None
+    profile_picture: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -140,6 +148,7 @@ class UserInDB(BaseModel):
     is_admin: bool = False
     is_active: bool = True
     email_verified: bool = True  # Auto-verified for mock
+    profile_picture: Optional[str] = None
     created_at: datetime
     email_verification_token: Optional[str] = None
 
@@ -365,6 +374,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         is_admin=db_user.is_admin,
         is_active=db_user.is_active,
         email_verified=db_user.email_verified,
+        profile_picture=db_user.profile_picture,
         created_at=db_user.created_at
     )
     
@@ -410,6 +420,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         is_admin=user.is_admin,
         is_active=user.is_active,
         email_verified=user.email_verified,
+        profile_picture=user.profile_picture,
         created_at=user.created_at
     )
     
@@ -428,6 +439,61 @@ def get_me(current_user: models.User = Depends(get_current_active_user)):
         is_admin=current_user.is_admin,
         is_active=current_user.is_active,
         email_verified=current_user.email_verified,
+        profile_picture=current_user.profile_picture,
+        created_at=current_user.created_at
+    )
+
+
+@app.put("/auth/profile", response_model=UserResponse, tags=["Authentication"])
+def update_profile(
+    profile_data: ProfileUpdate,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update current user's profile (username, email, profile picture)"""
+    # Check if new username is already taken by another user
+    if profile_data.username and profile_data.username != current_user.username:
+        existing_user = db.query(models.User).filter(
+            models.User.username == profile_data.username,
+            models.User.id != current_user.id
+        ).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken"
+            )
+        current_user.username = profile_data.username
+    
+    # Check if new email is already taken by another user
+    if profile_data.email and profile_data.email != current_user.email:
+        existing_email = db.query(models.User).filter(
+            models.User.email == profile_data.email,
+            models.User.id != current_user.id
+        ).first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already taken"
+            )
+        current_user.email = profile_data.email
+    
+    # Update profile picture if provided
+    if profile_data.profile_picture is not None:
+        current_user.profile_picture = profile_data.profile_picture
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    logger.info(f"User {current_user.username} updated their profile")
+    
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        is_admin=current_user.is_admin,
+        is_active=current_user.is_active,
+        email_verified=current_user.email_verified,
+        profile_picture=current_user.profile_picture,
         created_at=current_user.created_at
     )
 
@@ -607,6 +673,7 @@ def get_all_users(
             is_admin=user.is_admin,
             is_active=user.is_active,
             email_verified=user.email_verified,
+            profile_picture=user.profile_picture,
             created_at=user.created_at
         )
         for user in users
@@ -635,6 +702,7 @@ def get_user_by_id(
         is_admin=user.is_admin,
         is_active=user.is_active,
         email_verified=user.email_verified,
+        profile_picture=user.profile_picture,
         created_at=user.created_at
     )
 
@@ -731,6 +799,7 @@ def toggle_admin_role(
         is_admin=user.is_admin,
         is_active=user.is_active,
         email_verified=user.email_verified,
+        profile_picture=user.profile_picture,
         created_at=user.created_at
     )
 

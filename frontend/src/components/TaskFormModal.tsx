@@ -21,6 +21,25 @@ export function TaskFormModal({ task, onSave, onClose }: TaskFormModalProps) {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    
+    // Handle escape key
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscape);
+    
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
   useEffect(() => {
     if (task) {
       setFormData({

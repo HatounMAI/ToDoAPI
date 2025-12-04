@@ -11,7 +11,14 @@ export interface User {
   is_admin: boolean;
   is_active: boolean;
   email_verified: boolean;
+  profile_picture: string | null;
   created_at: string;
+}
+
+export interface ProfileUpdate {
+  username?: string;
+  email?: string;
+  profile_picture?: string | null;
 }
 
 export interface UserCreate {
@@ -146,6 +153,13 @@ export class AuthAPI {
 
   static async getCurrentUser(): Promise<User> {
     return apiRequest<User>('/auth/me');
+  }
+
+  static async updateProfile(profileData: ProfileUpdate): Promise<User> {
+    return apiRequest<User>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
   }
 
   static logout(): void {

@@ -15,6 +15,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     email_verified = Column(Boolean, default=True)
     email_verification_token = Column(String, nullable=True)
+    profile_picture = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship to todos

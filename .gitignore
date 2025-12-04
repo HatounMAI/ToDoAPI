@@ -33,13 +33,13 @@ api.log
 *.swp
 *.swo
 
-# Environment
-.env
-.env.local
-
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
+# vertual env
+.venv
 
+# node_modules
+node_modules

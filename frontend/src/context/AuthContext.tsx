@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authAPI, getToken, User, UserCreate, UserLogin, TokenResponse } from '../services/api';
+import { authAPI, getToken, User, UserCreate, UserLogin, TokenResponse, ProfileUpdate } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (userData: UserCreate) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  updateProfile: (profileData: ProfileUpdate) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -82,6 +83,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProfile = async (profileData: ProfileUpdate) => {
+    try {
+      const updatedUser = await authAPI.updateProfile(profileData);
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -92,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     refreshUser,
+    updateProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
