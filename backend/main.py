@@ -11,10 +11,17 @@ from sqlalchemy.orm import Session
 import time
 import logging
 import secrets
+import os
 
 # Database imports
 from database import get_db, engine
 import models
+
+# S3 service for profile image uploads
+from s3_service import generate_presigned_upload_url, delete_profile_image
+
+# DynamoDB session storage
+from session_service import create_session, validate_session, invalidate_session, invalidate_all_user_sessions
 
 # ============= LOGGING CONFIGURATION =============
 logging.basicConfig(
@@ -29,9 +36,9 @@ logger = logging.getLogger(__name__)
 
 
 # ============= AUTHENTICATION CONFIGURATION =============
-SECRET_KEY = "your-secret-key-change-in-production-use-openssl-rand-hex-32"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 30
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-fallback-key-change-in-production")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "30"))
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -55,11 +62,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(data: dict) -> str:
-    """Create a JWT access token"""
+    """Create a JWT access token with DynamoDB session tracking"""
     to_encode = data.copy()
     # Convert sub to string if it's an integer (JWT spec requires string)
     if "sub" in to_encode and isinstance(to_encode["sub"], int):
         to_encode["sub"] = str(to_encode["sub"])
+    
+    # Create session in DynamoDB and add session ID to token
+    session_id = create_session(user_id=int(to_encode["sub"]), expires_days=ACCESS_TOKEN_EXPIRE_DAYS)
+    to_encode["jti"] = session_id  # JWT ID for session tracking
+    
     expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -67,10 +79,21 @@ def create_access_token(data: dict) -> str:
 
 
 def verify_token(token: str) -> dict:
-    """Verify and decode a JWT token"""
+    """Verify JWT token and validate session in DynamoDB"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        logger.info(f"[AUTH] Token decoded successfully, payload: {payload}")
+        
+        # Validate session in DynamoDB (check if not revoked)
+        session_id = payload.get("jti")
+        if session_id and not validate_session(session_id):
+            logger.warning(f"[AUTH] Session revoked: {session_id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"[AUTH] Token verified, session: {session_id}")
         return payload
     except JWTError as e:
         logger.error(f"[AUTH] Token verification failed: {str(e)}")
@@ -129,7 +152,18 @@ class ProfileUpdate(BaseModel):
     """Model for profile update"""
     username: Optional[str] = Field(None, min_length=3, max_length=50)
     email: Optional[EmailStr] = None
-    profile_picture: Optional[str] = None
+    profile_picture: Optional[str] = None  # S3 URL of the uploaded image
+
+
+class UploadUrlRequest(BaseModel):
+    """Model for requesting a presigned upload URL"""
+    file_type: str = Field(..., description="MIME type of the file (e.g., 'image/png', 'image/jpeg')")
+
+
+class UploadUrlResponse(BaseModel):
+    """Model for presigned upload URL response"""
+    upload_url: str = Field(..., description="Presigned URL for uploading to S3")
+    file_url: str = Field(..., description="Final URL where the file will be accessible")
 
 
 class TokenResponse(BaseModel):
@@ -429,6 +463,39 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     return TokenResponse(access_token=access_token, user=user_response)
 
 
+@app.post("/auth/logout", tags=["Authentication"])
+def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    """
+    Logout - invalidate current session.
+    The JWT token will no longer be valid after this call.
+    """
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        session_id = payload.get("jti")
+        if session_id:
+            invalidate_session(session_id)
+            logger.info(f"User {current_user.username} logged out, session: {session_id}")
+    except JWTError:
+        pass  # Token already invalid
+    
+    return {"message": "Logged out successfully"}
+
+
+@app.post("/auth/logout-all", tags=["Authentication"])
+def logout_all_sessions(current_user: models.User = Depends(get_current_active_user)):
+    """
+    Logout from all devices - invalidate all sessions for current user.
+    All JWT tokens for this user will be revoked.
+    """
+    count = invalidate_all_user_sessions(current_user.id)
+    logger.info(f"User {current_user.username} logged out from all devices, {count} sessions invalidated")
+    return {"message": f"Logged out from all devices. {count} session(s) invalidated."}
+
+
 @app.get("/auth/me", response_model=UserResponse, tags=["Authentication"])
 def get_me(current_user: models.User = Depends(get_current_active_user)):
     """Get current user profile"""
@@ -477,9 +544,20 @@ def update_profile(
             )
         current_user.email = profile_data.email
     
-    # Update profile picture if provided
+    # Update profile picture if provided (S3 URL)
     if profile_data.profile_picture is not None:
-        current_user.profile_picture = profile_data.profile_picture
+        old_picture_url = current_user.profile_picture
+        
+        if profile_data.profile_picture == '':
+            # User wants to remove profile picture
+            current_user.profile_picture = None
+        else:
+            # User is setting a new profile picture URL
+            current_user.profile_picture = profile_data.profile_picture
+        
+        # Delete old image from S3 if it existed and was from our bucket
+        if old_picture_url and old_picture_url != profile_data.profile_picture:
+            delete_profile_image(old_picture_url)
     
     db.commit()
     db.refresh(current_user)
@@ -496,6 +574,45 @@ def update_profile(
         profile_picture=current_user.profile_picture,
         created_at=current_user.created_at
     )
+
+
+@app.post("/auth/profile/upload-url", response_model=UploadUrlResponse, tags=["Authentication"])
+def get_profile_upload_url(
+    request: UploadUrlRequest,
+    current_user: models.User = Depends(get_current_active_user)
+):
+    """
+    Get a presigned URL to upload a profile picture directly to S3.
+    
+    Flow:
+    1. Client calls this endpoint with the file's MIME type
+    2. Backend returns a presigned upload URL and the final file URL
+    3. Client uploads the file directly to S3 using the presigned URL
+    4. Client calls PUT /auth/profile with the file_url as profile_picture
+    """
+    # Validate file type
+    allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if request.file_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+    
+    try:
+        result = generate_presigned_upload_url(current_user.id, request.file_type)
+        logger.info(f"User {current_user.username} requested upload URL for profile picture")
+        return UploadUrlResponse(**result)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate upload URL: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate upload URL"
+        )
 
 
 @app.get("/", tags=["Root"])

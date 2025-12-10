@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { User, Mail, Camera, Upload, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authAPI } from '../services/api';
 
 interface UserProfilePageProps {
   user: {
@@ -31,6 +32,7 @@ export function UserProfilePage({ user, onUpdateProfile }: UserProfilePageProps)
 
   const [profileImage, setProfileImage] = useState(user.profile_picture || '');
   const [imagePreview, setImagePreview] = useState(user.profile_picture || '');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Debug logging
   useEffect(() => {
@@ -84,6 +86,10 @@ export function UserProfilePage({ user, onUpdateProfile }: UserProfilePageProps)
         return;
       }
 
+      // Store the file for later upload
+      setSelectedFile(file);
+
+      // Create preview URL
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -96,15 +102,31 @@ export function UserProfilePage({ user, onUpdateProfile }: UserProfilePageProps)
   };
 
   const handleSaveImage = async () => {
+    if (!selectedFile) {
+      setError('Please select an image first');
+      return;
+    }
+
     setIsSaving(true);
     setError('');
     try {
-      await onUpdateProfile({ profile_picture: imagePreview });
-      setProfileImage(imagePreview);
+      // Step 1: Get presigned URL from backend
+      const { upload_url, file_url } = await authAPI.getProfileUploadUrl(selectedFile.type);
+
+      // Step 2: Upload directly to S3
+      await authAPI.uploadToS3(upload_url, selectedFile);
+
+      // Step 3: Update profile with the S3 URL
+      await onUpdateProfile({ profile_picture: file_url });
+
+      setProfileImage(file_url);
+      setImagePreview(file_url);
+      setSelectedFile(null);
       setShowImageModal(false);
       setSuccess('Profile picture updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
+      console.error('Upload error:', err);
       setError(err.message || 'Failed to update profile picture');
     } finally {
       setIsSaving(false);
@@ -118,6 +140,7 @@ export function UserProfilePage({ user, onUpdateProfile }: UserProfilePageProps)
       await onUpdateProfile({ profile_picture: '' });
       setProfileImage('');
       setImagePreview('');
+      setSelectedFile(null);
       setShowImageModal(false);
       setSuccess('Profile picture removed successfully!');
       setTimeout(() => setSuccess(''), 3000);
@@ -401,7 +424,7 @@ export function UserProfilePage({ user, onUpdateProfile }: UserProfilePageProps)
                 )}
                 <button
                   onClick={handleSaveImage}
-                  disabled={isSaving || !imagePreview}
+                  disabled={isSaving || !selectedFile}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSaving ? (

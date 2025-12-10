@@ -21,6 +21,15 @@ export interface ProfileUpdate {
   profile_picture?: string | null;
 }
 
+export interface UploadUrlRequest {
+  file_type: string;
+}
+
+export interface UploadUrlResponse {
+  upload_url: string;
+  file_url: string;
+}
+
 export interface UserCreate {
   username: string;
   email: string;
@@ -160,6 +169,27 @@ export class AuthAPI {
       method: 'PUT',
       body: JSON.stringify(profileData),
     });
+  }
+
+  static async getProfileUploadUrl(fileType: string): Promise<UploadUrlResponse> {
+    return apiRequest<UploadUrlResponse>('/auth/profile/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ file_type: fileType }),
+    });
+  }
+
+  static async uploadToS3(uploadUrl: string, file: File): Promise<void> {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload image to S3');
+    }
   }
 
   static logout(): void {

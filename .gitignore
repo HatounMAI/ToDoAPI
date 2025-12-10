@@ -38,11 +38,8 @@ api.log
 *.sqlite
 *.sqlite3
 
-# vertual env
-.venv
-
+# vertual environment &  environment variables configuration
+*.venv
+*.env
 # node_modules
 node_modules
-
-# environment variables  configuration
-.env

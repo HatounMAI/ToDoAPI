@@ -28,6 +28,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      AWS_REGION: ${AWS_REGION}
+      DYNAMODB_SESSIONS_TABLE: ${DYNAMODB_SESSIONS_TABLE:-Sessions}
     depends_on:
       db:
         condition: service_healthy
