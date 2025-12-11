@@ -1,7 +1,3 @@
 {
-  "AWSEBDockerrunVersion": 3,
-  "authentication": {
-    "bucket": "hatoun-taskflow-bucket",
-    "key": "dockercfg"
-  }
+  "AWSEBDockerrunVersion": "3"
 }
